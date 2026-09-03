@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-display: "Playfair Display", "Georgia", serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+
+  --color-teal-50: #f0fdfa;
+  --color-brand: #0d9488;
+  --color-brand-dark: #0f766e;
+  --color-sand: #f59e0b;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  @apply antialiased bg-stone-50 text-stone-800 dark:bg-stone-950 dark:text-stone-200;
+}
+
+/* Heading hierarchy — consistent across all sections */
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  @apply tracking-tight;
+}
+
+/* Shared button styles */
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-teal-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-stone-950;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-full border border-stone-300 bg-white px-6 py-2.5 text-sm font-semibold text-stone-700 transition hover:border-teal-500 hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200 dark:hover:border-teal-400 dark:hover:text-teal-300;
+}
+
+.btn-amber {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-amber-500 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+/* Form fields */
+.input {
+  @apply w-full rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-800 placeholder-stone-400 transition focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/30 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-100 dark:placeholder-stone-500;
+}
+
+.label {
+  @apply mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300;
+}
+
+/* Card */
+.card {
+  @apply overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm transition dark:border-stone-800 dark:bg-stone-900;
+}
+
+.section-title {
+  @apply text-3xl font-bold text-stone-900 sm:text-4xl dark:text-white;
+}
+
+.section-subtitle {
+  @apply mt-3 max-w-2xl text-base text-stone-600 dark:text-stone-400;
+}
+
+/* Skeleton loader */
+.skeleton {
+  @apply animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800;
+}
+
+/* Badge */
+@utility badge {
+  @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+}
+
+.status-pending { @apply badge bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300; }
+.status-confirmed { @apply badge bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300; }
+.status-completed { @apply badge bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300; }
+.status-cancelled { @apply badge bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300; }
