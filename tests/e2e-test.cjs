@@ -56,8 +56,13 @@ function record(name, ok, detail = '') {
     await page.locator('button:has-text("Filters")').first().click();
     await page.waitForTimeout(400);
     await page.locator('button:has-text("Food & Local Life")').first().click();
-    await page.waitForTimeout(1200);
-    const filteredCards = await page.locator('article').count();
+    // wait until the filtered result count settles (production latency varies)
+    let filteredCards = 0;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await page.waitForTimeout(800);
+      filteredCards = await page.locator('article').count();
+      if (filteredCards > 0 && filteredCards < exploreCards) break;
+    }
     record('Explore: category filter works', filteredCards > 0 && filteredCards < exploreCards, `${filteredCards} after filter`);
     // reset
     await page.locator('button:has-text("Clear all filters")').click();
