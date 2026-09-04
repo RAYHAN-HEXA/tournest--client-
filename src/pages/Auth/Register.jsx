@@ -23,19 +23,28 @@ export default function Register() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm({ defaultValues: { role: "traveler" } });
 
-  const onSuccess = () => {
-    toast.success("Account created — welcome to TourNest!");
-    navigate(from, { replace: true });
+  // Registering as a guide auto-approves the guide role immediately (product
+  // requirement); travelers can later apply via Become a Guide for admin
+  // approval. The choice only matters for brand-new accounts.
+  const role = watch("role");
+
+  const onSuccess = (asGuide) => {
+    toast.success(
+      asGuide
+        ? "Guide account created — welcome to TourNest!"
+        : "Account created — welcome to TourNest!"
+    );
+    navigate(asGuide ? "/dashboard" : from, { replace: true });
   };
 
   const onSubmit = async (data) => {
     setSubmitting(true);
+    const asGuide = data.role === "guide";
     try {
-      // register() stores the role hint synchronously so the
-      // onAuthStateChanged server-sync creates the account with it.
       const cred = await registerAuth({
         name: data.name,
         email: data.email,
@@ -43,8 +52,8 @@ export default function Register() {
         photoURL: data.photoURL,
         role: data.role,
       });
-      await syncWithServer(cred, { name: data.name, photoURL: data.photoURL, role: data.role });
-      onSuccess();
+      await syncWithServer(cred, { name: data.name, photoURL: data.photoURL });
+      onSuccess(asGuide);
     } catch (err) {
       const msg = {
         "auth/email-already-in-use": "This email is already registered. Try logging in.",
@@ -61,7 +70,7 @@ export default function Register() {
     try {
       const cred = await googleLogin();
       await syncWithServer(cred, {});
-      onSuccess();
+      onSuccess(false);
     } catch (err) {
       if (err?.code !== "auth/popup-closed-by-user") {
         toast.error(err?.message || "Google sign-up failed");
@@ -172,6 +181,11 @@ export default function Register() {
                 </span>
               </label>
             </div>
+            {role === "guide" && (
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                Guide accounts are activated immediately — you can publish tours right after signup.
+              </p>
+            )}
           </fieldset>
 
           <button type="submit" className="btn-primary w-full !py-3" disabled={submitting}>

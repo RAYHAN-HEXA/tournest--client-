@@ -106,7 +106,7 @@ function AvatarMenu() {
                 <ShieldCheckIcon className="h-4.5 w-4.5" /> Admin Panel
               </Link>
             )}
-            {role === "" && (
+            {role === "traveler" && (
               <Link
                 to="/become-a-guide"
                 onClick={() => setOpen(false)}
@@ -143,7 +143,7 @@ function ThemeToggle() {
 }
 
 export default function Navbar() {
-  const { user, role } = useAuth();
+  const { user, role, authReady } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const links = [
@@ -152,9 +152,11 @@ export default function Navbar() {
   ];
   if (user) {
     links.push({ to: "/my-bookings", label: "My Bookings" });
-    if (role === "guide" || role === "admin") {
+    // Role-dependent links render only once the DB profile (role) is resolved,
+    // so a refresh never flashes the wrong menu items.
+    if (authReady && (role === "guide" || role === "admin")) {
       links.push({ to: "/dashboard", label: "Guide Dashboard" });
-    } else {
+    } else if (authReady && role === "traveler") {
       links.push({ to: "/become-a-guide", label: "Become a Guide" });
     }
   }

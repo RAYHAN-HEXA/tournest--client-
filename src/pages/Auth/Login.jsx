@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthProvider";
 
 export default function Login() {
   useTitle("Login");
-  const { login, googleLogin, resetPassword } = useAuth();
+  const { login, googleLogin, resetPassword, refreshDbUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from || "/";
@@ -47,16 +47,27 @@ export default function Login() {
     toast.success(`${label} demo credentials filled — press Login`);
   };
 
-  const onSuccess = () => {
+  const onSuccess = async () => {
     toast.success("Welcome back to TourNest!");
-    navigate(from, { replace: true });
+    // Role-based landing: if a protected route bounced the user here, honor
+    // the original destination; otherwise send each role to its own home
+    // (admin → /admin, guide → /dashboard, traveler → home).
+    if (location.state?.from) {
+      navigate(from, { replace: true });
+      return;
+    }
+    const dbRole = await refreshDbUser().then((u) => u?.role).catch(() => null);
+    navigate(
+      dbRole === "admin" ? "/admin" : dbRole === "guide" ? "/dashboard" : from,
+      { replace: true }
+    );
   };
 
   const onSubmit = async (data) => {
     setSubmitting(true);
     try {
       await login(data.email, data.password);
-      onSuccess();
+      await onSuccess();
     } catch (err) {
       const msg = {
         "auth/invalid-credential": "Wrong email or password. Please try again.",
@@ -74,7 +85,7 @@ export default function Login() {
     setSubmitting(true);
     try {
       await googleLogin();
-      onSuccess();
+      await onSuccess();
     } catch (err) {
       if (err?.code !== "auth/popup-closed-by-user") {
         toast.error(err?.message || "Google login failed");

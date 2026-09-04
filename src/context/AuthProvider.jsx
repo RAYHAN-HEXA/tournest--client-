@@ -18,6 +18,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // merged firebase + db user
   const [dbUser, setDbUser] = useState(null);
   const [loading, setLoading] = useState(true); // firebase auth restoring
+  const [syncError, setSyncError] = useState(null); // session bootstrap failure
 
   /** After any firebase sign-in: exchange ID token for our JWT + upsert profile. */
   const syncWithServer = useCallback(async (fbUser, extra = {}) => {
@@ -67,7 +68,14 @@ export function AuthProvider({ children }) {
           syncPromiseRef.current = syncPromiseRef.current || syncWithServer(fbUser);
           await syncPromiseRef.current;
         } catch (err) {
+          // Without a server session there is no verified role — rather than
+          // hang in a loading state or render unverified UI, drop the session
+          // and let the user retry (e.g. after backend comes back).
           console.error("Session sync failed:", err);
+          setSyncError(err?.message || "Could not load your profile. Please try again.");
+          setToken(null);
+          setDbUser(null);
+          await signOut(auth).catch(() => {});
         } finally {
           syncPromiseRef.current = null;
         }
@@ -113,8 +121,14 @@ export function AuthProvider({ children }) {
   const value = {
     user, // firebase user (uid, email, photoURL...)
     dbUser, // our DB profile (role, guideApplication status)
-    role: dbUser?.role || "traveler",
+    // null until the DB profile has loaded — components must not assume a
+    // role while it is null (prevents traveler-default flicker on refresh).
+    role: dbUser?.role ?? null,
+    /** True once firebase auth restore AND role resolution are both done. */
+    authReady: !loading && (!user || Boolean(dbUser)),
     loading,
+    syncError,
+    clearSyncError: () => setSyncError(null),
     register,
     login,
     googleLogin,

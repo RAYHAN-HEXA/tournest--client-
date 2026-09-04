@@ -87,16 +87,23 @@ export default function BecomeGuide() {
     );
   }
 
-  // Already an approved guide
-  if (existing && dbUser?.role === "guide") {
+  // Already an approved guide (or admin — admins manage the platform, they
+  // don't apply to become guides)
+  if ((existing && dbUser?.role === "guide") || dbUser?.role === "admin") {
     return (
       <div className="mx-auto max-w-lg px-4 py-24 text-center">
         <CheckCircleIcon className="mx-auto h-16 w-16 text-emerald-500" />
-        <h1 className="mt-4 section-title">You're already a guide!</h1>
+        <h1 className="mt-4 section-title">
+          {dbUser?.role === "admin" ? "Admins don't need to apply" : "You're already a guide!"}
+        </h1>
         <p className="mt-3 text-stone-600 dark:text-stone-400">
-          Your guide profile is active. Head to your dashboard to manage tours.
+          {dbUser?.role === "admin"
+            ? "As an admin you can already manage tours, bookings, and guide applications."
+            : "Your guide profile is active. Head to your dashboard to manage tours."}
         </p>
-        <a href="/dashboard" className="btn-primary mt-8">Open Guide Dashboard</a>
+        <a href={dbUser?.role === "admin" ? "/admin" : "/dashboard"} className="btn-primary mt-8">
+          {dbUser?.role === "admin" ? "Open Admin Panel" : "Open Guide Dashboard"}
+        </a>
       </div>
     );
   }
