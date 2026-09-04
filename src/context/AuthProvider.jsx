@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -18,7 +18,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // merged firebase + db user
   const [dbUser, setDbUser] = useState(null);
   const [loading, setLoading] = useState(true); // firebase auth restoring
-  const [savingUser, setSavingUser] = useState(false);
 
   /** After any firebase sign-in: exchange ID token for our JWT + upsert profile. */
   const syncWithServer = useCallback(async (fbUser, extra = {}) => {
@@ -28,10 +27,11 @@ export function AuthProvider({ children }) {
       {
         name: extra.name || fbUser.displayName || "",
         photoURL: extra.photoURL || fbUser.photoURL || "",
-        role: extra.role, // only honored for brand-new accounts
+        role: extra.role ?? pendingRoleRef.current, // only honored for brand-new accounts
       },
       { headers: { Authorization: `Bearer ${idToken}` } }
     );
+    pendingRoleRef.current = null;
     setToken(res.data.token ?? null);
     if (res.data.user) setDbUser(res.data.user);
     return res.data;
@@ -51,39 +51,25 @@ export function AuthProvider({ children }) {
     return null;
   }, []);
 
+  // The role a brand-new account wants (set synchronously by register() BEFORE
+  // createUser, so the onAuthStateChanged sync can never miss it — a
+  // window-event based approach used to lose that race).
+  const pendingRoleRef = useRef(null);
+  const syncPromiseRef = useRef(null);
+
   // Exchange a fresh ID token for our JWT whenever firebase session restores.
   // A single shared promise dedupes concurrent syncs (StrictMode + register).
   useEffect(() => {
-    let pendingRole = null;
-    let syncPromise = null;
-
-    const handler = (e) => {
-      pendingRole = e.detail?.role || null;
-    };
-    window.addEventListener("tournest:register-role", handler);
-
-    const doSync = async (fbUser) => {
-      const idToken = await fbUser.getIdToken(true);
-      const res = await api.post(
-        "/api/users",
-        { name: fbUser.displayName || "", photoURL: fbUser.photoURL || "", role: pendingRole },
-        { headers: { Authorization: `Bearer ${idToken}` } }
-      );
-      pendingRole = null;
-      setToken(res.data.token ?? null);
-      if (res.data.user) setDbUser(res.data.user);
-    };
-
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setUser(fbUser);
       if (fbUser) {
         try {
-          syncPromise = syncPromise || doSync(fbUser);
-          await syncPromise;
+          syncPromiseRef.current = syncPromiseRef.current || syncWithServer(fbUser);
+          await syncPromiseRef.current;
         } catch (err) {
           console.error("Session sync failed:", err);
         } finally {
-          syncPromise = null;
+          syncPromiseRef.current = null;
         }
       } else {
         setToken(null);
@@ -91,14 +77,14 @@ export function AuthProvider({ children }) {
       }
       setLoading(false);
     });
-    return () => {
-      window.removeEventListener("tournest:register-role", handler);
-      unsubscribe();
-    };
-  }, []);
+    return unsubscribe;
+  }, [syncWithServer]);
 
   const register = useCallback(
-    async ({ name, email, password, photoURL }) => {
+    async ({ name, email, password, photoURL, role }) => {
+      // Set the role hint synchronously BEFORE createUser — onAuthStateChanged
+      // fires the server sync and reads it from the ref. No event race.
+      pendingRoleRef.current = role || null;
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       if (photoURL || name) {
         await updateProfile(cred.user, { displayName: name, photoURL: photoURL || undefined });
@@ -129,8 +115,6 @@ export function AuthProvider({ children }) {
     dbUser, // our DB profile (role, guideApplication status)
     role: dbUser?.role || "traveler",
     loading,
-    savingUser,
-    setSavingUser,
     register,
     login,
     googleLogin,

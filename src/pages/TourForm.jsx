@@ -50,7 +50,7 @@ export default function TourForm({ mode }) {
       .then((res) => {
         if (!alive) return;
         const t = res.data.tour;
-        if (t.guideEmail !== user?.email && role !== "admin") {
+        if (t.guideEmail?.toLowerCase() !== user?.email?.toLowerCase() && role !== "admin") {
           setDenied("You can only edit your own tours.");
           return;
         }

@@ -42,39 +42,33 @@ export default function AdminDashboard() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [s, a] = await Promise.all([
-        api.get("/api/admin/stats"),
-        api.get("/api/admin/guide-applications", { params: { status: "pending" } }),
-      ]);
-      setStats(s.data.stats);
-      setApplications(a.data.applications || []);
-      if (tab === "users") await loadUsers();
-      if (tab === "tours") await loadTours();
-      if (tab === "bookings") await loadBookings();
-    } catch {
-      toast.error("Could not load admin data");
-    } finally {
-      setLoading(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  const loadStats = useCallback(
+    () => api.get("/api/admin/stats").then((r) => setStats(r.data.stats)).catch(() => {}),
+    []
+  );
 
-  const loadUsers = async () => {
+  const loadUsers = useCallback(async () => {
     const res = await api.get("/api/admin/users", { params: { limit: 100 } });
     setUsers(res.data.users || []);
-  };
-  const loadTours = async () => {
+  }, []);
+  const loadTours = useCallback(async () => {
     const res = await api.get("/api/admin/tours", { params: { limit: 100 } });
     setTours(res.data.tours || []);
-  };
-  const loadBookings = async () => {
+  }, []);
+  const loadBookings = useCallback(async () => {
     const res = await api.get("/api/admin/bookings", { params: { limit: 100 } });
     setBookings(res.data.bookings || []);
-  };
+  }, []);
 
+  // Initial load: stats + pending applications (for the tab badge).
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([loadStats(), api.get("/api/admin/guide-applications", { params: { status: "pending" } }).then((r) => setApplications(r.data.applications || []))])
+      .catch(() => toast.error("Could not load admin data"))
+      .finally(() => setLoading(false));
+  }, [loadStats]);
+
+  // Per-tab data loads.
   useEffect(() => {
     if (tab === "users") loadUsers().catch(() => toast.error("Failed to load users"));
     if (tab === "tours") loadTours().catch(() => toast.error("Failed to load tours"));
@@ -85,11 +79,7 @@ export default function AdminDashboard() {
         .then((r) => setApplications(r.data.applications || []))
         .catch(() => toast.error("Failed to load applications"));
     }
-  }, [tab]);
-
-  useEffect(() => {
-    api.get("/api/admin/stats").then((r) => setStats(r.data.stats)).catch(() => {});
-  }, []);
+  }, [tab, loadUsers, loadTours, loadBookings]);
 
   const decideApplication = async (app, decision) => {
     try {
@@ -100,7 +90,7 @@ export default function AdminDashboard() {
           : `${app.name}'s application rejected`
       );
       setApplications((list) => list.filter((a) => a._id !== app._id));
-      api.get("/api/admin/stats").then((r) => setStats(r.data.stats)).catch(() => {});
+      loadStats();
     } catch (err) {
       toast.error(err.response?.data?.message || "Action failed");
     }
@@ -127,24 +117,24 @@ export default function AdminDashboard() {
   };
 
   const removeUser = async (u) => {
-    if (!window.Swal) {
-      // fallback simple confirm
-      if (!confirm(`Delete ${u.name} and all their data?`)) return;
-    }
+    if (!window.confirm(`Delete ${u.name} and all their data? This cannot be undone.`)) return;
     try {
       await api.delete(`/api/admin/users/${u._id}`);
       toast.success(`${u.name} removed from platform`);
       loadUsers();
+      loadStats();
     } catch (err) {
       toast.error(err.response?.data?.message || "Delete failed");
     }
   };
 
   const removeTour = async (t) => {
+    if (!window.confirm(`Remove “${t.title}” from the platform? It will no longer be bookable.`)) return;
     try {
       await api.delete(`/api/admin/tours/${t._id}`);
       toast.success(`“${t.title}” removed from platform`);
       loadTours();
+      loadStats();
     } catch (err) {
       toast.error(err.response?.data?.message || "Remove failed");
     }

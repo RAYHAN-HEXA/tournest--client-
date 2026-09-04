@@ -89,7 +89,8 @@ function record(name, ok, detail = '') {
   await ctx.close();
 
   // Admin approves via API
-  const adminLogin = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyA6-oel1ZrfrmZpZ9CRuh7AgZXy_zI7AH4', {
+  // Sign in via the Firebase Identity Toolkit REST API using the TourNest key.
+  const adminLogin = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.VITE_FIREBASE_API_KEY}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: 'admin@tournest.dev', password: 'Admin@123456', returnSecureToken: true }),
   }).then((r) => r.json());

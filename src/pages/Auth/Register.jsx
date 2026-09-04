@@ -4,7 +4,6 @@ import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
 import useTitle from "../../hooks/useTitle";
 import { useAuth } from "../../context/AuthProvider";
-import { api } from "../../api/axios";
 
 const passwordRules = [
   { test: (v) => /[A-Z]/.test(v), label: "One uppercase letter" },
@@ -35,15 +34,14 @@ export default function Register() {
   const onSubmit = async (data) => {
     setSubmitting(true);
     try {
-      // Tell the onAuthStateChanged sync which role a brand-new account wants.
-      window.dispatchEvent(
-        new CustomEvent("tournest:register-role", { detail: { role: data.role } })
-      );
+      // register() stores the role hint synchronously so the
+      // onAuthStateChanged server-sync creates the account with it.
       const cred = await registerAuth({
         name: data.name,
         email: data.email,
         password: data.password,
         photoURL: data.photoURL,
+        role: data.role,
       });
       await syncWithServer(cred, { name: data.name, photoURL: data.photoURL, role: data.role });
       onSuccess();

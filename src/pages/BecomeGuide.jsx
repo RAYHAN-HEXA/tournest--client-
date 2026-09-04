@@ -23,6 +23,7 @@ export default function BecomeGuide() {
   const [existing, setExisting] = useState(null);
   const [checking, setChecking] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [justSubmitted, setJustSubmitted] = useState(false);
   const [selectedLangs, setSelectedLangs] = useState([]);
   const [selectedCats, setSelectedCats] = useState([]);
 
@@ -36,7 +37,14 @@ export default function BecomeGuide() {
     let alive = true;
     api
       .get("/api/guides/my")
-      .then((res) => alive && setExisting(res.data.guide))
+      .then((res) => {
+        if (!alive) return;
+        const g = res.data.guide;
+        setExisting(g);
+        // Prefill chips from a previous application so "Update Application" starts honest.
+        if (g?.languages?.length) setSelectedLangs(g.languages);
+        if (g?.preferredCategories?.length) setSelectedCats(g.preferredCategories);
+      })
       .catch(() => {})
       .finally(() => alive && setChecking(false));
     return () => {
@@ -62,8 +70,8 @@ export default function BecomeGuide() {
         preferredCategories: selectedCats,
       });
       await refreshDbUser();
-      toast.success("Application submitted! An admin will review it shortly.");
-      navigate("/my-bookings");
+      setJustSubmitted(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       toast.error(err.response?.data?.message || "Could not submit application");
     } finally {
@@ -93,16 +101,26 @@ export default function BecomeGuide() {
     );
   }
 
-  // Application pending
-  if (dbUser?.guideApplication?.status === "pending") {
+  // Application pending (freshly submitted or awaiting admin review)
+  if (justSubmitted || dbUser?.guideApplication?.status === "pending") {
     return (
       <div className="mx-auto max-w-lg px-4 py-24 text-center">
         <ClockIcon className="mx-auto h-16 w-16 text-amber-500" />
-        <h1 className="mt-4 section-title">Application under review</h1>
+        <h1 className="mt-4 section-title">
+          {justSubmitted ? "Application submitted!" : "Application under review"}
+        </h1>
         <p className="mt-3 text-stone-600 dark:text-stone-400">
           Thanks for applying! An admin reviews new guide applications, usually within
           a couple of days. You'll get guide access as soon as you're approved.
         </p>
+        <div className="mt-8 flex justify-center gap-3">
+          <button onClick={() => navigate("/my-bookings")} className="btn-secondary">
+            My Bookings
+          </button>
+          <button onClick={() => navigate("/tours")} className="btn-primary">
+            Explore Tours
+          </button>
+        </div>
       </div>
     );
   }

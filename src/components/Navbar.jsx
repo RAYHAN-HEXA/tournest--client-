@@ -72,7 +72,7 @@ function AvatarMenu() {
             )}
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-stone-900 dark:text-white">
-                {user?.displayName || dbUser?.name || "Traveler"}
+                {user?.displayName || dbUser?.name || ""}
               </p>
               <p className="truncate text-xs text-stone-500 dark:text-stone-400">{user?.email}</p>
               <span className="badge mt-1 bg-teal-100 text-teal-800 capitalize dark:bg-teal-900/40 dark:text-teal-300">
@@ -106,7 +106,7 @@ function AvatarMenu() {
                 <ShieldCheckIcon className="h-4.5 w-4.5" /> Admin Panel
               </Link>
             )}
-            {role === "traveler" && (
+            {role === "" && (
               <Link
                 to="/become-a-guide"
                 onClick={() => setOpen(false)}

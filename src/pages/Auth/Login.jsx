@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
@@ -13,12 +13,39 @@ export default function Login() {
   const from = location.state?.from || "/";
   const [submitting, setSubmitting] = useState(false);
 
+  // The axios 401 interceptor bounces here with ?expired=1 when a stored
+  // session token is rejected — tell the user why they landed on this page.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("expired")) {
+      toast.error("Your session expired. Please log in again.");
+      params.delete("expired");
+      const qs = params.toString();
+      navigate({ pathname: "/login", search: qs ? `?${qs}` : "" }, { replace: true });
+    }
+  }, [navigate]);
+
   const {
     register,
     handleSubmit,
     getValues,
+    setValue,
     formState: { errors },
   } = useForm();
+
+  // Demo credentials so reviewers can try each role without signing up.
+  const DEMO_ACCOUNTS = {
+    admin: { email: "admin@tournest.dev", password: "Admin@123456", label: "Admin" },
+    guide: { email: "rashed.guide@tournest.dev", password: "Guide@123456", label: "Guide" },
+    traveler: { email: "imran.traveler@tournest.dev", password: "Traveler@123456", label: "Traveler" },
+  };
+
+  const fillDemo = (role) => {
+    const { email, password, label } = DEMO_ACCOUNTS[role];
+    setValue("email", email, { shouldValidate: true });
+    setValue("password", password, { shouldValidate: true });
+    toast.success(`${label} demo credentials filled — press Login`);
+  };
 
   const onSuccess = () => {
     toast.success("Welcome back to TourNest!");
@@ -115,6 +142,20 @@ export default function Login() {
             {submitting ? "Logging in…" : "Login"}
           </button>
         </form>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {Object.entries(DEMO_ACCOUNTS).map(([role, { label }]) => (
+            <button
+              key={role}
+              type="button"
+              onClick={() => fillDemo(role)}
+              title={`${DEMO_ACCOUNTS[role].email} / ${DEMO_ACCOUNTS[role].password}`}
+              className="rounded-lg border border-dashed border-stone-300 px-3 py-2 text-sm font-medium text-stone-600 transition hover:border-teal-600 hover:bg-teal-50 hover:text-teal-700 dark:border-stone-600 dark:text-stone-300 dark:hover:border-teal-400 dark:hover:bg-teal-400/10 dark:hover:text-teal-300"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
         <div className="my-6 flex items-center gap-3">
           <div className="h-px flex-1 bg-stone-200 dark:bg-stone-700" />
