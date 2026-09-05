@@ -6,7 +6,7 @@ const EXE = '/Users/rayhan/Library/Caches/ms-playwright/chromium_headless_shell-
   const browser = await chromium.launch({ executablePath: EXE });
   const page = await (await browser.newContext()).newPage();
   const logs = [];
-  page.on('response', (r) => { if (r.url().includes('localhost:5000')) logs.push(`RESP: ${r.status()} ${r.url()}`); });
+  page.on('response', (r) => { if (r.url().includes('tournest-server.vercel.app')) logs.push(`RESP: ${r.status()} ${r.url()}`); });
   page.on('pageerror', (e) => logs.push(`PAGEERROR: ${e.message}`));
 
   await page.goto('http://localhost:5173/login', { waitUntil: 'networkidle' });

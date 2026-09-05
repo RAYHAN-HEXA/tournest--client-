@@ -11,7 +11,7 @@ import {
   deleteUser,
 } from 'firebase/auth';
 
-const API = 'http://localhost:5000';
+const API = 'https://tournest-server.vercel.app';
 const results = [];
 const record = (name, pass, detail = '') => {
   results.push({ name, pass });

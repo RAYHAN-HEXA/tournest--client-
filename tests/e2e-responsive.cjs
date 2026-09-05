@@ -95,7 +95,7 @@ function record(name, ok, detail = '') {
     body: JSON.stringify({ email: 'admin@tournest.dev', password: 'Admin@123456', returnSecureToken: true }),
   }).then((r) => r.json());
 
-  const api = 'http://localhost:5000';
+  const api = 'https://tournest-server.vercel.app';
   // Get firebase id token → exchange for JWT
   const sync = await fetch(`${api}/api/users`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminLogin.idToken}` },

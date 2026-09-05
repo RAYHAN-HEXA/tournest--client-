@@ -10,7 +10,7 @@ const EXE = '/Users/rayhan/Library/Caches/ms-playwright/chromium_headless_shell-
   page.on('pageerror', (e) => logs.push(`PAGEERROR: ${e.message}`));
   page.on('requestfailed', (r) => logs.push(`REQFAIL: ${r.method()} ${r.url()} — ${r.failure()?.errorText}`));
   page.on('response', (r) => {
-    if (r.url().includes('localhost:5000')) logs.push(`RESP: ${r.status()} ${r.url()}`);
+    if (r.url().includes('tournest-server.vercel.app')) logs.push(`RESP: ${r.status()} ${r.url()}`);
   });
 
   await page.goto('http://localhost:5173/register', { waitUntil: 'networkidle' });

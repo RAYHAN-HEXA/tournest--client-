@@ -1,18 +1,16 @@
 
 ==================================================
-FILE: ./.env.example
+FILE: ./.claude/settings.local.json
 ==================================================
 
-# TourNest API base URL (no trailing slash)
-VITE_API_URL=http://localhost:5000
-
-# Firebase (client SDK)
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote *)",
+      "Bash(git push *)"
+    ]
+  }
+}
 
 
 
@@ -229,7 +227,7 @@ import axios from "axios";
  *  - response: on 401, clear the dead token and bounce to /login once
  */
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
+  baseURL: import.meta.env.VITE_API_URL || "https://tournest-server.vercel.app",
 });
 
 const TOKEN_KEY = "tournest_token";
@@ -712,7 +710,7 @@ function AvatarMenu() {
             )}
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-stone-900 dark:text-white">
-                {user?.displayName || dbUser?.name || "Traveler"}
+                {user?.displayName || dbUser?.name || ""}
               </p>
               <p className="truncate text-xs text-stone-500 dark:text-stone-400">{user?.email}</p>
               <span className="badge mt-1 bg-teal-100 text-teal-800 capitalize dark:bg-teal-900/40 dark:text-teal-300">
@@ -783,7 +781,7 @@ function ThemeToggle() {
 }
 
 export default function Navbar() {
-  const { user, role } = useAuth();
+  const { user, role, authReady } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const links = [
@@ -792,9 +790,11 @@ export default function Navbar() {
   ];
   if (user) {
     links.push({ to: "/my-bookings", label: "My Bookings" });
-    if (role === "guide" || role === "admin") {
+    // Role-dependent links render only once the DB profile (role) is resolved,
+    // so a refresh never flashes the wrong menu items.
+    if (authReady && (role === "guide" || role === "admin")) {
       links.push({ to: "/dashboard", label: "Guide Dashboard" });
-    } else {
+    } else if (authReady && role === "traveler") {
       links.push({ to: "/become-a-guide", label: "Become a Guide" });
     }
   }
@@ -886,17 +886,37 @@ import { useAuth } from "../context/AuthProvider";
 import Spinner from "./Spinner";
 
 /**
- * Guards private routes. Uses the firebase auth restoring flag so a page
- * reload never kicks an authenticated user back to /login.
+ * Role-aware route guard.
+ *
+ * Waits for authReady (firebase restore + JWT session sync + DB profile with
+ * role) before deciding, so a page refresh never flashes the wrong role or an
+ * unauthorized message while the profile is still loading.
+ *
+ * - Unauthenticated  → redirect to /login (preserving the intended destination).
+ * - Wrong role       → redirect to their own home page.
+ * - Authorized       → render children.
  */
 export default function ProtectedRoute({ children, roles }) {
-  const { user, loading, role } = useAuth();
+  const { user, role, authReady, syncError } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  if (!authReady) {
+    if (syncError) {
+      // Backend was unreachable during session bootstrap — no verified role.
+      return (
+        <div className="mx-auto max-w-md px-4 py-24 text-center">
+          <h1 className="section-title">Session problem</h1>
+          <p className="mt-3 text-stone-600 dark:text-stone-400">{syncError}</p>
+          <button onClick={() => window.location.reload()} className="btn-primary mt-6">
+            Retry
+          </button>
+        </div>
+      );
+    }
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3">
         <Spinner size="lg" />
+        <p className="text-sm text-stone-500 dark:text-stone-400">Loading your session…</p>
       </div>
     );
   }
@@ -906,14 +926,9 @@ export default function ProtectedRoute({ children, roles }) {
   }
 
   if (roles && !roles.includes(role)) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-24 text-center">
-        <h1 className="section-title">Access restricted</h1>
-        <p className="mt-4 text-stone-600 dark:text-stone-400">
-          This page requires the {roles.join(" or ")} role. You are signed in as a {role}.
-        </p>
-      </div>
-    );
+    // Send the user to the home page of the role they actually have.
+    const home = role === "admin" ? "/admin" : role === "guide" ? "/dashboard" : "/";
+    return <Navigate to={location.pathname === home ? "/" : home} replace />;
   }
 
   return children;
@@ -1050,6 +1065,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // merged firebase + db user
   const [dbUser, setDbUser] = useState(null);
   const [loading, setLoading] = useState(true); // firebase auth restoring
+  const [syncError, setSyncError] = useState(null); // session bootstrap failure
 
   /** After any firebase sign-in: exchange ID token for our JWT + upsert profile. */
   const syncWithServer = useCallback(async (fbUser, extra = {}) => {
@@ -1099,7 +1115,14 @@ export function AuthProvider({ children }) {
           syncPromiseRef.current = syncPromiseRef.current || syncWithServer(fbUser);
           await syncPromiseRef.current;
         } catch (err) {
+          // Without a server session there is no verified role — rather than
+          // hang in a loading state or render unverified UI, drop the session
+          // and let the user retry (e.g. after backend comes back).
           console.error("Session sync failed:", err);
+          setSyncError(err?.message || "Could not load your profile. Please try again.");
+          setToken(null);
+          setDbUser(null);
+          await signOut(auth).catch(() => {});
         } finally {
           syncPromiseRef.current = null;
         }
@@ -1145,8 +1168,14 @@ export function AuthProvider({ children }) {
   const value = {
     user, // firebase user (uid, email, photoURL...)
     dbUser, // our DB profile (role, guideApplication status)
-    role: dbUser?.role || "traveler",
+    // null until the DB profile has loaded — components must not assume a
+    // role while it is null (prevents traveler-default flicker on refresh).
+    role: dbUser?.role ?? null,
+    /** True once firebase auth restore AND role resolution are both done. */
+    authReady: !loading && (!user || Boolean(dbUser)),
     loading,
+    syncError,
+    clearSyncError: () => setSyncError(null),
     register,
     login,
     googleLogin,
@@ -1850,7 +1879,7 @@ import { useAuth } from "../../context/AuthProvider";
 
 export default function Login() {
   useTitle("Login");
-  const { login, googleLogin, resetPassword } = useAuth();
+  const { login, googleLogin, resetPassword, refreshDbUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from || "/";
@@ -1890,16 +1919,27 @@ export default function Login() {
     toast.success(`${label} demo credentials filled — press Login`);
   };
 
-  const onSuccess = () => {
+  const onSuccess = async () => {
     toast.success("Welcome back to TourNest!");
-    navigate(from, { replace: true });
+    // Role-based landing: if a protected route bounced the user here, honor
+    // the original destination; otherwise send each role to its own home
+    // (admin → /admin, guide → /dashboard, traveler → home).
+    if (location.state?.from) {
+      navigate(from, { replace: true });
+      return;
+    }
+    const dbRole = await refreshDbUser().then((u) => u?.role).catch(() => null);
+    navigate(
+      dbRole === "admin" ? "/admin" : dbRole === "guide" ? "/dashboard" : from,
+      { replace: true }
+    );
   };
 
   const onSubmit = async (data) => {
     setSubmitting(true);
     try {
       await login(data.email, data.password);
-      onSuccess();
+      await onSuccess();
     } catch (err) {
       const msg = {
         "auth/invalid-credential": "Wrong email or password. Please try again.",
@@ -1917,7 +1957,7 @@ export default function Login() {
     setSubmitting(true);
     try {
       await googleLogin();
-      onSuccess();
+      await onSuccess();
     } catch (err) {
       if (err?.code !== "auth/popup-closed-by-user") {
         toast.error(err?.message || "Google login failed");
@@ -2058,19 +2098,28 @@ export default function Register() {
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm({ defaultValues: { role: "traveler" } });
 
-  const onSuccess = () => {
-    toast.success("Account created — welcome to TourNest!");
-    navigate(from, { replace: true });
+  // Registering as a guide auto-approves the guide role immediately (product
+  // requirement); travelers can later apply via Become a Guide for admin
+  // approval. The choice only matters for brand-new accounts.
+  const role = watch("role");
+
+  const onSuccess = (asGuide) => {
+    toast.success(
+      asGuide
+        ? "Guide account created — welcome to TourNest!"
+        : "Account created — welcome to TourNest!"
+    );
+    navigate(asGuide ? "/dashboard" : from, { replace: true });
   };
 
   const onSubmit = async (data) => {
     setSubmitting(true);
+    const asGuide = data.role === "guide";
     try {
-      // register() stores the role hint synchronously so the
-      // onAuthStateChanged server-sync creates the account with it.
       const cred = await registerAuth({
         name: data.name,
         email: data.email,
@@ -2078,8 +2127,8 @@ export default function Register() {
         photoURL: data.photoURL,
         role: data.role,
       });
-      await syncWithServer(cred, { name: data.name, photoURL: data.photoURL, role: data.role });
-      onSuccess();
+      await syncWithServer(cred, { name: data.name, photoURL: data.photoURL });
+      onSuccess(asGuide);
     } catch (err) {
       const msg = {
         "auth/email-already-in-use": "This email is already registered. Try logging in.",
@@ -2096,7 +2145,7 @@ export default function Register() {
     try {
       const cred = await googleLogin();
       await syncWithServer(cred, {});
-      onSuccess();
+      onSuccess(false);
     } catch (err) {
       if (err?.code !== "auth/popup-closed-by-user") {
         toast.error(err?.message || "Google sign-up failed");
@@ -2207,6 +2256,11 @@ export default function Register() {
                 </span>
               </label>
             </div>
+            {role === "guide" && (
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                Guide accounts are activated immediately — you can publish tours right after signup.
+              </p>
+            )}
           </fieldset>
 
           <button type="submit" className="btn-primary w-full !py-3" disabled={submitting}>
@@ -2336,16 +2390,23 @@ export default function BecomeGuide() {
     );
   }
 
-  // Already an approved guide
-  if (existing && dbUser?.role === "guide") {
+  // Already an approved guide (or admin — admins manage the platform, they
+  // don't apply to become guides)
+  if ((existing && dbUser?.role === "guide") || dbUser?.role === "admin") {
     return (
       <div className="mx-auto max-w-lg px-4 py-24 text-center">
         <CheckCircleIcon className="mx-auto h-16 w-16 text-emerald-500" />
-        <h1 className="mt-4 section-title">You're already a guide!</h1>
+        <h1 className="mt-4 section-title">
+          {dbUser?.role === "admin" ? "Admins don't need to apply" : "You're already a guide!"}
+        </h1>
         <p className="mt-3 text-stone-600 dark:text-stone-400">
-          Your guide profile is active. Head to your dashboard to manage tours.
+          {dbUser?.role === "admin"
+            ? "As an admin you can already manage tours, bookings, and guide applications."
+            : "Your guide profile is active. Head to your dashboard to manage tours."}
         </p>
-        <a href="/dashboard" className="btn-primary mt-8">Open Guide Dashboard</a>
+        <a href={dbUser?.role === "admin" ? "/admin" : "/dashboard"} className="btn-primary mt-8">
+          {dbUser?.role === "admin" ? "Open Admin Panel" : "Open Guide Dashboard"}
+        </a>
       </div>
     );
   }
@@ -5649,7 +5710,7 @@ const EXE = '/Users/rayhan/Library/Caches/ms-playwright/chromium_headless_shell-
   page.on('pageerror', (e) => logs.push(`PAGEERROR: ${e.message}`));
   page.on('requestfailed', (r) => logs.push(`REQFAIL: ${r.method()} ${r.url()} — ${r.failure()?.errorText}`));
   page.on('response', (r) => {
-    if (r.url().includes('localhost:5000')) logs.push(`RESP: ${r.status()} ${r.url()}`);
+    if (r.url().includes('https://tournest-server.vercel.app/')) logs.push(`RESP: ${r.status()} ${r.url()}`);
   });
 
   await page.goto('http://localhost:5173/register', { waitUntil: 'networkidle' });
@@ -5680,7 +5741,7 @@ const EXE = '/Users/rayhan/Library/Caches/ms-playwright/chromium_headless_shell-
   const browser = await chromium.launch({ executablePath: EXE });
   const page = await (await browser.newContext()).newPage();
   const logs = [];
-  page.on('response', (r) => { if (r.url().includes('localhost:5000')) logs.push(`RESP: ${r.status()} ${r.url()}`); });
+  page.on('response', (r) => { if (r.url().includes('https://tournest-server.vercel.app/')) logs.push(`RESP: ${r.status()} ${r.url()}`); });
   page.on('pageerror', (e) => logs.push(`PAGEERROR: ${e.message}`));
 
   await page.goto('http://localhost:5173/login', { waitUntil: 'networkidle' });
@@ -5847,7 +5908,7 @@ import {
   deleteUser,
 } from 'firebase/auth';
 
-const API = 'http://localhost:5000';
+const API = 'https://tournest-server.vercel.app';
 const results = [];
 const record = (name, pass, detail = '') => {
   results.push({ name, pass });
@@ -6363,7 +6424,7 @@ function record(name, ok, detail = '') {
     body: JSON.stringify({ email: 'admin@tournest.dev', password: 'Admin@123456', returnSecureToken: true }),
   }).then((r) => r.json());
 
-  const api = 'http://localhost:5000';
+  const api = 'https://tournest-server.vercel.app';
   // Get firebase id token → exchange for JWT
   const sync = await fetch(`${api}/api/users`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminLogin.idToken}` },
